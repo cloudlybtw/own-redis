@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 )
 
 func printHelp() {
@@ -18,5 +20,31 @@ func main() {
 		printHelp()
 		os.Exit(0)
 	}
-	fmt.Println(*port)
+
+	udpAddr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(*port))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Println("Succesfull connection to port", *port)
+
+	for {
+		var buf [512]byte
+		_, addr, err := conn.ReadFromUDP(buf[0:])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		fmt.Print("> ", string(buf[0:]))
+
+		// Write back the message over UPD
+		conn.WriteToUDP(buf[0:], addr)
+	}
 }
