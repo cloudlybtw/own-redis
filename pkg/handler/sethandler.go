@@ -3,10 +3,11 @@ package handler
 import (
 	"log/slog"
 	"net"
-	. "own-redis/pkg/core"
 	"strconv"
 	"strings"
 	"time"
+
+	. "own-redis/pkg/core"
 )
 
 func ProcessSet(t string, addr *net.UDPAddr, conn *net.UDPConn) {

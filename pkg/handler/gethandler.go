@@ -3,8 +3,9 @@ package handler
 import (
 	"log/slog"
 	"net"
-	. "own-redis/pkg/core"
 	"strings"
+
+	. "own-redis/pkg/core"
 )
 
 func ProcessGet(t string, addr *net.UDPAddr, conn *net.UDPConn) {
