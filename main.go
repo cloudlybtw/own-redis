@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 func PrintHelp() {
@@ -22,12 +24,13 @@ var (
 	preregexGet = regexp.MustCompile(`^GET(\s+.+)?$`)
 	regexGet    = regexp.MustCompile(`^GET [\w]*$`)
 	regexSetPX  = regexp.MustCompile(`^SET [\w]* [\w\s]* PX \d+$`)
+	Data        sync.Map
 )
 
 func main() {
 	port := flag.Int("port", 8080, "The port on which UDP protocol are transferred.")
 	help := flag.Bool("help", false, "Displays help message.")
-	// var m map[string]string
+
 	flag.Parse()
 	if *help {
 		PrintHelp()
@@ -67,36 +70,65 @@ func main() {
 
 		switch {
 		case regexPing.MatchString(strings.ToUpper(text)):
+			slog.Info("code 0. PING requested.")
 			conn.WriteToUDP([]byte("PONG\n"), addr)
 			slog.Info("code 0. Connection check is succesful.")
 
 		case preregexSet.MatchString(strings.ToUpper(text)):
-			if regexSetPX.MatchString(strings.ToUpper(text)) {
-				conn.WriteToUDP([]byte("OKPX\n"), addr)
-				slog.Info("code 0. SET processed succesfully.")
-
-			} else if regexSet.MatchString(strings.ToUpper(text)) {
-				conn.WriteToUDP([]byte("OK\n"), addr)
-				slog.Info("code 0. SET processed succesfully.")
-
-			} else {
-				conn.WriteToUDP([]byte("Wrong arguments: \"SET [key] [val]\"\n"), addr)
-				slog.Info("code 6. SET not processed, wrong arguments.")
-			}
-
+			ProcessSet(text, addr, conn)
 		case preregexGet.MatchString(strings.ToUpper(text)):
-			if regexGet.MatchString(strings.ToUpper(text)) {
-				conn.WriteToUDP([]byte("GOT\n"), addr)
-				slog.Info("code 0. GET processed succesfully.")
-
-			} else {
-				conn.WriteToUDP([]byte("Wrong arguments: \"GET [key]\"\n"), addr)
-				slog.Info("code 6. GET not processed, wrong arguments.")
-			}
-
+			ProcessGet(text, addr, conn)
 		default:
-			conn.WriteToUDP([]byte("Unknown command\n"), addr)
-			slog.Info("code 8. Unsupported command")
+			conn.WriteToUDP([]byte("(error) ERR unknown command\n"), addr)
+			slog.Error("code 8. Unsupported command requested.")
 		}
+	}
+}
+
+func ProcessSet(t string, addr *net.UDPAddr, conn *net.UDPConn) {
+	slog.Info("code 0. SET requested.")
+	if regexSetPX.MatchString(strings.ToUpper(t)) {
+		split := strings.Split(t, " ")
+		Data.Store(split[1], strings.Join(split[2:len(split)-2], " "))
+		t, err := strconv.Atoi(split[len(split)-1])
+		if err != nil {
+			conn.WriteToUDP([]byte("Wrong time set, not int.\n"), addr)
+			slog.Info("code 6. SET not processed, wrong argument for time.")
+		}
+		go func() {
+			time.Sleep(time.Duration(t) * time.Millisecond)
+			Data.Delete(split[1])
+			slog.Info("code 0. Key " + split[1] + " was deleted succesfully.")
+		}()
+		conn.WriteToUDP([]byte("OK\n"), addr)
+		slog.Info("code 0. SET processed succesfully.")
+
+	} else if regexSet.MatchString(strings.ToUpper(t)) {
+		split := strings.Split(t, " ")
+		(&Data).Store(split[1], strings.Join(split[2:], " "))
+		conn.WriteToUDP([]byte("OK\n"), addr)
+		slog.Info("code 0. SET key " + split[1] + " succesfully.")
+	} else {
+		conn.WriteToUDP([]byte("(error) ERR wrong number of arguments for 'SET' command\n"), addr)
+		slog.Error("code 6. SET not processed, wrong arguments.")
+	}
+}
+
+func ProcessGet(t string, addr *net.UDPAddr, conn *net.UDPConn) {
+	slog.Info("code 0. GET requested.")
+	if regexGet.MatchString(strings.ToUpper(t)) {
+		split := strings.Split(t, " ")
+		value, _ := (&Data).Load(split[1])
+		str, exists := value.(string)
+		if exists {
+			conn.WriteToUDP([]byte(str+"\n"), addr)
+		} else {
+			conn.WriteToUDP([]byte("(nil)\n"), addr)
+		}
+		slog.Info("code 0. GET key " + split[1] + " processed succesfully.")
+
+	} else {
+		conn.WriteToUDP([]byte("(error) ERR wrong number of arguments for 'GET' command\n"), addr)
+		slog.Error("code 6. GET not processed, wrong arguments.")
 	}
 }
