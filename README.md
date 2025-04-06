@@ -11,7 +11,7 @@ Follow these steps to install the project locally on your machine:
 
 1. Clone the repository:
    ```bash
-   $ git clone git@git.platform.alem.school:dakabirov/own-redis.git
+   $ git clone git@github.com:cloudlybtw/own-redis.git
 2. Navigate into the project directory:
     ```bash
     $ cd own-redis
